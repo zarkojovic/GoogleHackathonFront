@@ -1,16 +1,39 @@
 <script setup>
 import L from 'leaflet'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch, watchEffect } from 'vue'
 import * as tf from '@tensorflow/tfjs'
 import { marked } from 'marked'
+import { Dialog } from 'primevue'
+import Loader from '@/components/atoms/Loader.vue'
 
 const map = ref(null)
-const text = ref(null)
+const text = ref('')
 const mapImage = ref(null)
+const markerLoader = ref(false)
+const isLoading = ref(true)
+const showDialog = ref(false)
+const headerTitle = ref('Header')
+const areMarkersLoaded = ref(false)
 
 const formattedText = computed(() => {
-  return marked(text.value);
+  return marked(text.value)
 })
+
+watch(markerLoader, (newValue) => {
+  if (newValue) {
+    isLoading.value = false
+  } else {
+    isLoading.value = true
+  }
+})
+watch(text, (newValue) => {
+  if (newValue) {
+    isLoading.value = false
+  } else {
+    isLoading.value = true
+  }
+})
+
 
 const latMin = 44.6,
   latMax = 45.0
@@ -32,24 +55,6 @@ function denormalizeCoordinates(normalizedLat, normalizedLon) {
     normalizedLat * (latMax - latMin) + latMin,
     normalizedLon * (lonMax - lonMin) + lonMin
   ]
-}
-
-function haversineDistance(coord1, coord2) {
-  const R = 6371 // Earth's radius in km
-  const [lat1, lon1] = coord1
-  const [lat2, lon2] = coord2
-
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLon = ((lon2 - lon1) * Math.PI) / 180
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) ** 2
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c // Distance in km
 }
 
 const csvUrl = `/HeatmapData.csv`
@@ -181,7 +186,7 @@ async function fetchAddressFromCoordinates(lng, lat) {
 
 onMounted(async () => {
   // Initialize the map
-  const mapInstance = L.map('map').setView([44.8, 20.5], 13)
+  const mapInstance = L.map('map').setView([44.81, 20.45], 14)
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution:
@@ -189,75 +194,103 @@ onMounted(async () => {
   }).addTo(mapInstance)
 
   const processedDataset = []
-  await dataset.forEachAsync(async (row) => {
-    const geo = await formatJsonString(row['.geo'])
-    processedDataset.push({
-      xs: [geo.coordinates[1], geo.coordinates[0]],
-      ys: [row.b1, row.b2, row.b3]
+  const predictions = JSON.parse(localStorage.getItem('predictionsCoordinates')) || []
+
+  if (!predictions.length) {
+    await dataset.forEachAsync(async (row) => {
+      const geo = await formatJsonString(row['.geo'])
+      processedDataset.push({
+        xs: [geo.coordinates[1], geo.coordinates[0]],
+        ys: [row.b1, row.b2, row.b3]
+      })
     })
-  })
 
-  processedDataset.reverse()
+    processedDataset.reverse()
 
-  const model = await trainModel(processedDataset)
+    const model = await trainModel(processedDataset)
 
-  const inputsForPrediction = [
-    [243, 142, 43],
-    [225, 216, 30],
-    [225, 212, 51],
-    [255, 100, 50],
-    [244, 168, 40]
-  ]
+    const inputsForPrediction = [
+      [243, 142, 43],
+      [225, 216, 30],
+      [225, 212, 51],
+      [255, 100, 50],
+      [244, 168, 40]
+    ]
 
-  const predictions = []
 
-  for (const bandValues of inputsForPrediction) {
-    const predictedCoordinate = await predictHeatIslands(
-      model,
-      bandValues
-    )
-    predictions.push(predictedCoordinate)
+    for (const bandValues of inputsForPrediction) {
+      const predictedCoordinate = await predictHeatIslands(
+        model,
+        bandValues
+      )
+      predictions.push(predictedCoordinate)
+    }
+  }else{
+    areMarkersLoaded.value = true
   }
 
   predictions.forEach((coordinate, index) => {
     const marker = L.marker(coordinate)
       .addTo(mapInstance)
-      .bindPopup(`Critical Coordinate ${index + 1}`)
+      // make it red
+      .setIcon(
+        new L.Icon({
+          iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        })
+      )
       .openPopup()
 
     marker.on('click', async function() {
       const { lat, lng } = marker.getLatLng()
+
+      const storedCoordinates = JSON.parse(localStorage.getItem('predictionsCoordinates')) || []
+      console.log(storedCoordinates)
+      if (storedCoordinates.length < 5) {
+        storedCoordinates.push({ lat, lng })
+        localStorage.setItem('predictionsCoordinates', JSON.stringify(storedCoordinates))
+      }
+
       const mapboxImageUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},15/640x640?access_token=pk.eyJ1IjoibGlubmlrYWdlbmN5IiwiYSI6ImNtMzRtZWlnYzAxNmUyanF4ZmxxZnJnc24ifQ.PyWdx3E09PfzIcF_SQyvWA`
       mapImage.value = mapboxImageUrl
       const googleApiKey = 'AIzaSyDyC6R9_D_HCskAJ06IRUXCPU2gRPI3_iE'
 
       const address = await fetchAddressFromCoordinates(lng, lat)
+      headerTitle.value = `Analiza lokacije: ${address}`
 
       const prompt = `Molim te da analiziraš sledeću lokaciju u Beogradu i predložiš konkretna poboljšanja za održivi razvoj. Fokusiraj se na aspekte kao što su zelene površine, energetska efikasnost, saobraćajna infrastruktura, otpad, kvalitet vazduha i drugi relevantni faktori za poboljšanje održivosti. Navedi konkretne korake koji se mogu preduzeti, kao i potencijalne koristi od tih promena.
 
                       Naziv adrese: ${address}.
 
                       Odgovor treba da bude u sledećem standardizovanom formatu:
-                      1. **Predlozi za poboljšanje:**
+                      1. Predlozi za poboljšanje:
+                      ===========================
                          - [Predlog 1]
                          - [Predlog 2]
                          - [Predlog 3]
 
-                      2. **Potencijalne koristi za zajednicu:**
+                      2. Potencijalne koristi za zajednicu:
+                      =====================================
                          - [Korist 1]
                          - [Korist 2]
                          - [Korist 3]
 
-                      3. **Preporučeni akcioni koraci:**
+                      3. Preporučeni akcioni koraci:
+                      =============================
                          - [Korak 1]
                          - [Korak 2]
                          - [Korak 3]
 
-                      Format odgovora treba biti jasan i sažet, sa tačkama i podnaslovima, kako bi mogao da se iskoristi za štampanje ili prikaz u aplikaciji. Ovaj odgovor treba biti direktno upotrebljiv u aplikaciji, sa jasno označenim delovima koji će se prikazivati kao liste ili tekst.`;
+                      Format odgovora treba biti jasan i sažet, sa tačkama i podnaslovima, kako bi mogao da se iskoristi za štampanje ili prikaz u aplikaciji. Ovaj odgovor treba biti direktno upotrebljiv u aplikaciji, sa jasno označenim delovima koji će se prikazivati kao liste ili tekst.`
 
       fetchImageAsBase64(mapboxImageUrl)
         .then((base64Image) => {
-          text.value = 'Image fetched'
+          isLoading.value = true
+          showDialog.value = true
           return sendRequestToGemini(base64Image, googleApiKey, prompt)
         })
         .then((response) => {
@@ -267,20 +300,29 @@ onMounted(async () => {
           console.error('Error:', error)
         })
 
-      alert(
-        "Wait while we're generating suggestions for improving the area..."
-      )
     })
+
   })
+
+  markerLoader.value = true
 })
 </script>
 
 <template>
-  <div id="map" ref="map" style="height: 50vh; width: 100%"></div>
-  <div v-if="mapImage" class="flex justify-center">
-    <img :src="mapImage" alt="Map" style="max-width: 100%; height: auto" />
+  <Loader :is-loading="isLoading" />
+  <div class=" overflow-hidden">
+  <div id="map" ref="map" class="rounded-2xl" style="height: 75vh; width: 100%"></div>
   </div>
-  <div v-if="text" v-html="formattedText"></div>
+  <Dialog v-model:visible="showDialog" modal :header="headerTitle" :style="{ width: '50rem' }"
+          :breakpoints="{ '1199px': '75vw', '575px': '90vw' }">
+    <div v-if="mapImage" class="flex justify-center">
+      <img :src="mapImage" alt="Map" style="max-width: 100%; height: auto" />
+    </div>
+    <div v-if="text">
+      <p v-html="formattedText" class="p-4"></p>
+    </div>
+  </Dialog>
+
 </template>
 
 <style scoped>

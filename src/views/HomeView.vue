@@ -12,13 +12,11 @@ const increment = () => {
 </script>
 
 <template>
-  <main>
-    <Button @click="increment">Pozz</Button>
-    <h1>Home</h1>
-
-    <p>Counter: {{ store.count }}</p>
+  <main class="p-5">
+    <h1 class="font-bold mb-3 text-2xl">
+      Zdravo, Žarko! 🌍
+    </h1>
     <Map/>
-
   </main>
 </template>
 
