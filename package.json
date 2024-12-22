@@ -11,11 +11,15 @@
   },
   "dependencies": {
     "@primevue/themes": "^4.2.5",
+    "@tensorflow/tfjs": "^4.22.0",
     "axios": "^1.7.9",
+    "leaflet": "^1.9.4",
+    "marked": "^15.0.4",
     "pinia": "^2.2.6",
     "primevue": "^4.2.5",
     "tailwind": "^4.0.0",
     "vue": "^3.5.13",
+    "vue-leaflet": "^0.1.0",
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
