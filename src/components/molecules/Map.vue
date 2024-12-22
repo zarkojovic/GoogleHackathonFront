@@ -196,7 +196,7 @@ onMounted(async () => {
   const processedDataset = []
   const predictions = JSON.parse(localStorage.getItem('predictionsCoordinates')) || []
 
-  if (!predictions.length) {
+  if (predictions.length < 5) {
     await dataset.forEachAsync(async (row) => {
       const geo = await formatJsonString(row['.geo'])
       processedDataset.push({
@@ -250,7 +250,7 @@ onMounted(async () => {
 
       const storedCoordinates = JSON.parse(localStorage.getItem('predictionsCoordinates')) || []
       console.log(storedCoordinates)
-      if (storedCoordinates.length < 5) {
+      if (!storedCoordinates.some(coord => coord.lat === lat && coord.lng === lng)) {
         storedCoordinates.push({ lat, lng })
         localStorage.setItem('predictionsCoordinates', JSON.stringify(storedCoordinates))
       }

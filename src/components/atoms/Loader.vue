@@ -2,8 +2,11 @@
   <div class="vl-parent">
     <loading :active="isLoading"
              :can-cancel="true"
+
              @update:active="updateIsLoading"
-             :is-full-page="fullPage"/>
+             :is-full-page="fullPage">
+      <img src="/icon.png" alt="icon" class="w-16 animate-spin">
+    </loading>
   </div>
 </template>
 
