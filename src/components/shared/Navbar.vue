@@ -52,6 +52,10 @@ const items = ref([
     icon: 'pi pi-search',
     badge: 3,
     to: '/projects',
+  },
+  {
+    label: 'Predictions',
+    to: '/predictions',
   }
 ]);
 </script>

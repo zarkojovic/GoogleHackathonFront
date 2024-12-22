@@ -1,5 +1,6 @@
 <template>
-    <div class="mb-6">
+    <div class="mb-6 h-screen mt-10">
+      <Loader :is-loading="isLoading" />
       <LineChart :chart-data="chartData" :chart-options="chartOptions" />
     </div>
 </template>
@@ -9,10 +10,10 @@
   import { LineChart } from "vue-chart-3";
   import { Chart, registerables } from "chart.js";
   import * as tf from "@tensorflow/tfjs";
+  import Loader from '@/components/atoms/Loader.vue'
   
   Chart.register(...registerables);
   
-  // Define the CSV file path
   const csvUrl = `/LowestTemperatures.csv`;
   
   async function processDataset(dataset) {
@@ -27,19 +28,27 @@
     return data;
   }
   
-  async function trainTemperatureModel(data) {
-    // Convert dates to numeric values and normalize them
-  const dateToNumber = (date) => new Date(date).getTime();
-  const inputs = data.map((d) => dateToNumber(d.date) / 1e12); // Normalize dates
+async function trainTemperatureModel(data) {
+    const dateToFeatures = (date) => {
+    const d = new Date(date);
+    const dayOfYear = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000); // Day of the year
+    const normalizedDay = dayOfYear / 365; // Normalize between 0 and 1
+    return [
+      Math.sin(2 * Math.PI * normalizedDay), // Sine for seasonality
+      Math.cos(2 * Math.PI * normalizedDay), // Cosine for seasonality
+    ];
+  };
+
+  const inputs = data.map((d) => dateToFeatures(d.date)); // Generate features for all inputs
   const labels = data.map((d) => d.minTemp); // Minimum temperatures as labels
 
   // Convert inputs and labels to tensors
-  const inputTensor = tf.tensor2d(inputs, [inputs.length, 1]);
-  const labelTensor = tf.tensor2d(labels, [labels.length, 1]); // Use tensor2d for continuous outputs
+  const inputTensor = tf.tensor2d(inputs, [inputs.length, 2]); // Two features per input
+  const labelTensor = tf.tensor2d(labels, [labels.length, 1]); // Single output label per input
 
   // Define the model
   const model = tf.sequential();
-  model.add(tf.layers.dense({ inputShape: [1], units: 64, activation: "relu" }));
+  model.add(tf.layers.dense({ inputShape: [2], units: 64, activation: "relu" })); // Adjust inputShape to [2]
   model.add(tf.layers.dense({ units: 32, activation: "relu" }));
   model.add(tf.layers.dense({ units: 1 })); // Output a single float value
 
@@ -58,28 +67,50 @@
   });
 
   return model;
+}
+
+function generateNextYearDates() {
+  const nextYear = new Date().getFullYear() + 1;
+  const dates = [];
+  for (let month = 0; month < 12; month++) {
+    for (let day = 1; day <= new Date(nextYear, month + 1, 0).getDate(); day++) {
+      dates.push(`${nextYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+    }
   }
+  return dates;
+}
   
-  async function predictTemperatures(model, nextYearDates) {
-    const dateToNumber = (date) => new Date(date).getTime();    
-    const normalizedDates = nextYearDates.map((date) => dateToNumber(date) / 1e12);
-    const inputTensor = tf.tensor2d(normalizedDates, [nextYearDates.length, 1]);
+async function predictTemperatures(model, nextYearDates) {
+  const dateToFeatures = (date) => {
+    const d = new Date(date);
+    const dayOfYear = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000); // Day of the year
+    const normalizedDay = dayOfYear / 365; // Normalize between 0 and 1
+    return [
+      Math.sin(2 * Math.PI * normalizedDay), // Sine for seasonality
+      Math.cos(2 * Math.PI * normalizedDay), // Cosine for seasonality
+    ];
+  };
+
+  const features = nextYearDates.map((date) => dateToFeatures(date)); // Generate features
+  const inputTensor = tf.tensor2d(features, [nextYearDates.length, 2]); // Match input shape
+
+  const predictions = model.predict(inputTensor);
+
+  return predictions.array().then((predictedLabels) =>
+    nextYearDates.map((date, index) => ({
+      date,
+      prediction: predictedLabels[index],
+    }))
+  );
+}
   
-    const predictions = model.predict(inputTensor);
-    
-    return predictions.array().then((predictedLabels) =>
-      nextYearDates.map((date, index) => ({
-        date,
-        prediction: predictedLabels[index],
-      }))
-    );
-  }
-  
-  export default {
+export default {
     components: {
       LineChart,
+      Loader
     },
-    setup() {
+    setup() {      
+      const isLoading = ref(true)
       const chartData = ref({
         labels: [],
         datasets: [
@@ -97,42 +128,76 @@
         maintainAspectRatio: false,
         scales: {
           x: {
-            type: "time",
-            time: {
-              unit: "day",
+            ticks: {
+            callback: (value, index, ticks) => {
+              const date = ticks[index].value;
+              const [year, month, day] = date.split("-");
+              return `${day}.${month}`;
+            },
             },
           },
           y: {
             min: 15,
-            max: 50,
-            // ticks: 5,
-          },
+            max: 30,
+            ticks: {
+                stepSize: 5,
+            },
+            },
         },
       });
+
+    async function fetchData() {
+      const rawDataset = tf.data.csv(csvUrl);
+
+      const processedDataset = await processDataset(rawDataset);
+      localStorage.setItem('temperatureData', JSON.stringify(processedDataset));
+
+      return processedDataset;
+    }
+
+    async function loadFromLocalStorage() {
+      const storedData = localStorage.getItem('temperatureData');
+      if (storedData) {
+        return JSON.parse(storedData);
+      }
+      return null;
+    }
       
-      onMounted(async () => {
-        const rawDataset = tf.data.csv(csvUrl);
-        
-        const processedDataset = await processDataset(rawDataset);
-        
+    onMounted(async () => {
+        const storedDataset = await loadFromLocalStorage();
+
+        let processedDataset;
+
+        if (storedDataset) {
+            console.log("usao");
+            
+            processedDataset = storedDataset;
+        } else {
+            processedDataset = await fetchData();
+        }
+  
         const model = await trainTemperatureModel(processedDataset);
         
-        const nextYearDates = [
-          "2025-01-01",
-          "2025-12-01",
-        ];
+        const nextYearDates = generateNextYearDates();        
   
         const predictions = await predictTemperatures(model, nextYearDates);
         
-        // Update chart data
+        isLoading.value = false;
+        
         chartData.value.labels = predictions.map((p) => p.date);
-        chartData.value.datasets[0].data = predictions.map((p) => p.prediction);
-      });
+        chartData.value.datasets[0].data = predictions.map((p) => {            
+            const prediction = Array.isArray(p.prediction) ? p.prediction[0] : p.prediction;
+            return parseFloat(prediction).toFixed(5);
+        });
+
+    });
   
+
       return {
         chartData,
         chartOptions,
+        isLoading
       };
     },
-  };
-  </script>
+};
+</script>
