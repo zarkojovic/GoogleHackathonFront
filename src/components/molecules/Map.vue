@@ -27,7 +27,7 @@ watch(markerLoader, (newValue) => {
   }
 })
 watch(text, (newValue) => {
-  if (newValue) {
+  if (newValue.length > 15) {
     isLoading.value = false
   } else {
     isLoading.value = true
@@ -117,18 +117,6 @@ var mapboxImageUrl
 const azureOpenAiUrl =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyDyC6R9_D_HCskAJ06IRUXCPU2gRPI3_iE'
 
-async function sendRequestToAzure(payload) {
-  const response = await fetch(azureOpenAiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  })
-
-  const responseData = await response.json()
-  console.log('Azure OpenAI Response: ', responseData)
-}
 
 async function fetchImageAsBase64(url) {
   const response = await fetch(url)
@@ -158,6 +146,8 @@ const sendRequestToGemini = async (base64Image, apiKey, prompt) => {
       }
     ]
   }
+
+  text.value = 'Loading...';
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
