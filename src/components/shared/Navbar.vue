@@ -34,9 +34,8 @@ const items = ref([
     to: '/'
   },
   {
-    label: 'O nama',
-    icon: 'pi pi-info-circle',
-    to: '/about'
+    label: 'Predviđanja',
+    to: '/predictions',
   },
   {
     label: 'Projekti',
@@ -44,9 +43,5 @@ const items = ref([
     badge: 3,
     to: '/projects',
   },
-  {
-    label: 'Predictions',
-    to: '/predictions',
-  }
 ]);
 </script>

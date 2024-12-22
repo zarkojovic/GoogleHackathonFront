@@ -4,30 +4,30 @@
       <LineChart :chart-data="chartData" :chart-options="chartOptions" />
     </div>
 </template>
-  
+
   <script>
   import { ref, onMounted } from "vue";
   import { LineChart } from "vue-chart-3";
   import { Chart, registerables } from "chart.js";
   import * as tf from "@tensorflow/tfjs";
   import Loader from '@/components/atoms/Loader.vue'
-  
+
   Chart.register(...registerables);
-  
+
   const csvUrl = `/LowestTemperatures.csv`;
-  
+
   async function processDataset(dataset) {
     const data = [];
-    await dataset.forEachAsync((row) => {        
-        const date = row.date; 
-        const minTemp = parseFloat(row.minTemp); 
+    await dataset.forEachAsync((row) => {
+        const date = row.date;
+        const minTemp = parseFloat(row.minTemp);
 
         data.push({ date, minTemp });
-    });    
-    
+    });
+
     return data;
   }
-  
+
 async function trainTemperatureModel(data) {
     const dateToFeatures = (date) => {
     const d = new Date(date);
@@ -79,7 +79,7 @@ function generateNextYearDates() {
   }
   return dates;
 }
-  
+
 async function predictTemperatures(model, nextYearDates) {
   const dateToFeatures = (date) => {
     const d = new Date(date);
@@ -103,26 +103,26 @@ async function predictTemperatures(model, nextYearDates) {
     }))
   );
 }
-  
+
 export default {
     components: {
       LineChart,
       Loader
     },
-    setup() {      
+    setup() {
       const isLoading = ref(true)
       const chartData = ref({
         labels: [],
         datasets: [
           {
-            label: "Temperature Predictions",
+            label: "Najniža temperatura",
             backgroundColor: "#42A5F5",
             borderColor: "#1E88E5",
             data: [],
           },
         ],
       });
-  
+
       const chartOptions = ref({
         responsive: true,
         maintainAspectRatio: false,
@@ -162,7 +162,7 @@ export default {
       }
       return null;
     }
-      
+
     onMounted(async () => {
         const storedDataset = await loadFromLocalStorage();
 
@@ -170,28 +170,28 @@ export default {
 
         if (storedDataset) {
             console.log("usao");
-            
+
             processedDataset = storedDataset;
         } else {
             processedDataset = await fetchData();
         }
-  
+
         const model = await trainTemperatureModel(processedDataset);
-        
-        const nextYearDates = generateNextYearDates();        
-  
+
+        const nextYearDates = generateNextYearDates();
+
         const predictions = await predictTemperatures(model, nextYearDates);
-        
+
         isLoading.value = false;
-        
+
         chartData.value.labels = predictions.map((p) => p.date);
-        chartData.value.datasets[0].data = predictions.map((p) => {            
+        chartData.value.datasets[0].data = predictions.map((p) => {
             const prediction = Array.isArray(p.prediction) ? p.prediction[0] : p.prediction;
             return parseFloat(prediction).toFixed(5);
         });
 
     });
-  
+
 
       return {
         chartData,
