@@ -1,7 +1,6 @@
-
 <template>
   <div class="card">
-    <Menubar :model="items">
+    <Menubar :model="items" >
       <template #start>
         <svg width="35" height="40" viewBox="0 0 35 40" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-8">
           <path
@@ -16,7 +15,7 @@
       </template>
       <template #item="{ item, props, hasSubmenu, root }">
         <RouterLink class="flex items-center" v-bind="props.action" :to="item.to">
-          <span>{{ item.label }}</span>
+          <span class="fw-bold">{{ item.label }}</span>
           <Badge v-if="item.badge" :class="{ 'ml-auto': !root, 'ml-2': root }" :value="item.badge" />
           <span v-if="item.shortcut" class="ml-auto border border-surface rounded bg-emphasis text-muted-color text-xs p-1">{{ item.shortcut }}</span>
           <i v-if="hasSubmenu" :class="['pi pi-angle-down ml-auto', { 'pi-angle-down': root, 'pi-angle-right': !root }]"></i>
@@ -24,7 +23,7 @@
       </template>
       <template #end>
         <div class="flex items-center gap-2">
-          <InputText placeholder="Search" type="text" class="w-32 sm:w-auto" />
+          <InputText placeholder="Search" type="text" class="w-32 sm:w-auto" rounded-full />
           <Avatar image="https://primefaces.org/cdn/primevue/images/avatar/amyelsner.png" shape="circle" />
         </div>
       </template>
